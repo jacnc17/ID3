@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+
+<!-- Carga de d3.js -->
+<script src="https://d3js.org/d3.v4.js"></script>
+<script src="https://d3js.org/d3-scale-chromatic.v1.min.js"></script>
+<script src="https://d3js.org/d3-geo-projection.v2.min.js"></script>
+
+<script src="https://unpkg.com/d3-simple-slider"></script>
+
+<head>
+	<link rel="stylesheet" href="estilos.css">
+</head>
+
+
+<body onload="barraTiempo();barraRango(); rellena_select()">
+
+
+	<!-- Elemento SVG donde albergar el mapa -->
+	<svg id="imagen"  width="800" height="2200" ></svg>
+
+	<script>
+	
+		// BLOQUE GESTIÓN RECARGA DE MAPA
+
+		var primera = 0; // Indicará si es o no la primera carga de página.
+
+		// Método para llamar al javascript de carga de CSV con los datos del filtro.
+		function load_js()
+		{
+	
+			// Se ignora la primera carga.
+			if (primera==0)
+			{
+				primera = 1;
+			}
+			else // Si no es la primera carga, significa que hay un mapa a borrar.
+			{ 
+				borra_mapa();
+				//////////////////////////////
+			}
+
+			recarga_script();
+		}
+
+		load_js(); // Carga inicial del mapa.
+
+		// FIN BLOQUE GESTIÓN RECARGA DE MAPA
+
+		// VARIABLES QUE SERVIRÁN DE FILTRO
+		var anno_inicio = 2019; // Valor del año inicial
+		var anno_fin = 2020; // Valor del año final
+		var minimo = 1; // Mínimo número de desplazados a mostrar por pantalla.
+		var maximo = 1000000; // Máximo número de desplazados a mostrar por pantalla.
+		var pais_filtro = ''; // País de origen por el que filtramos.
+		var pais_filtro_destino = ''; // País de destino por el que filtramos.
+
+		// BLOQUE DE GESTIÓN DE FECHA
+		function barraTiempo()
+		{
+			// Los datos serán entre 0 y 4 millones (!) de desplazados, según los datos del csv.
+			var data = [2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020];
+					
+			// Range
+			var sliderTime = d3
+				.sliderBottom()
+				.min(d3.min(data))
+				.max(d3.max(data))
+				.width(300)
+				//.step( 60 * 60 * 24 * 365)
+				.step(1)
+				.tickFormat(d3.format('4')) // Formato de 4 dígitos
+				.ticks(12) // Número de marcas en la barra.
+				.default([2019, 2020]) // Rango por defecto.
+				.fill('#2196f3') // Color 
+				.on('onchange', val => {
+					// d3.select('p#value-range').text(val.map(d3.format('.2%')).join('-')); // Se llama cada vez que cambia el valor
+				})
+				.on('end', val => {
+					// d3.select('p#value-range').text(val.map(d3.format('.2%')).join('-')); // Se llama cada vez que se consolida un desplazamiento
+					anno_inicio = val[0];
+					anno_fin = val[1];
+					borra_mapa();
+					recarga_script();
+				})
+			;		
+
+
+
+			// Se crea un div específico para almacenar el slider de tiempo.
+			var gTime = d3
+			  .select('div#slider-time')
+			  .append('svg')
+			  .attr('width', 400)
+			  .attr('height', 100)
+			  .append('g')
+			  .attr('transform', 'translate(20,10)')
+			  ;
+		   
+			gTime.call(sliderTime); // Generamos el slider para el tiempo.
+			
+
+		}
+		
+		// Método para mostrar una barra de rangos.
+		function barraRango () 
+		{
+			// Los datos serán entre 0 y 4 millones (!) de desplazados, según los datos del csv.
+			var data = [0,  4000000];
+					
+			// Range
+			var sliderRange = d3
+				.sliderBottom()
+				.min(d3.min(data))
+				.max(d3.max(data))
+				.width(350)
+				//.tickFormat(d3.format('.2%')) // Formato en % con 2 decimales - no aplica
+				.ticks(5) // Número de marcas en la barra.
+				.default([1, 1000000]) // Rango por defecto.
+				.fill('#2196f3') // Color 
+				.on('onchange', val => {
+					// d3.select('p#value-range').text(val.map(d3.format('.2%')).join('-')); // Se llama cada vez que cambia el valor
+				})
+				.on('end', val => {
+					// d3.select('p#value-range').text(val.map(d3.format('.2%')).join('-')); // Se llama cada vez que se consolida un desplazamiento
+					minimo = val[0];
+					maximo = val[1];
+					borra_mapa();
+					recarga_script();
+				})
+			;		
+
+
+			// Se ubica en pantalla mediante un 'g'.
+			var gRange = d3
+				.select('div#slider-range')
+				.append('svg')
+				.attr('width', 450)
+				.attr('height', 100)
+				.append('g')
+				.attr('transform', 'translate(15,10)');
+
+			// Se arranca el slider.
+			gRange.call(sliderRange);
+	
+		}
+		
+		
+		// Método que borra el mapa eliminando el objeto svg completo, de manera que no haya 
+		// dos mapas en pantalla cuando se recargan los filtros.
+		function borra_mapa()
+		{
+			console.warn ("Recreando imagen");
+			var mapa_old =  document.getElementById('imagen'); // Recuperamos la imagen que haya
+			mapa_old.remove(); // Borramos la imagen anterior.
+
+			// Creamos una nueva imagen con las mismas dimensiones.
+			var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+			svg.setAttributeNS(null,"id","imagen");
+			svg.setAttributeNS(null,"height","2200");
+			svg.setAttributeNS(null,"width","800");
+			
+			// Se añade al body del documento
+			document.getElementsByTagName('body')[0].appendChild(svg);
+		}
+
+
+		// Método que toma las variables anno_actual, minimo y maximo y regenera el mapa
+		// llamando de nuevo al script que recarga el csv.
+		function recarga_script()
+		{
+			// Se crea un nuevo script.
+			var script = document.createElement('script');
+
+			// El nuevo script cargará la información con el nuevo año y un "cachebuster" para evitar cacheo de info.
+			script.src= 'carga_csv.js?anno_ini='+anno_inicio+'&anno_fin='+anno_fin+'&min='+minimo+'&max='+maximo+'&pais='+pais_filtro+'&paisdestino='+pais_filtro_destino+'&cachebuster='+ new Date().getTime();
+
+			// console.error('Recargando! carga_csv.js?year='+anio+'&min='+minimo+'&max='+maximo+'&cachebuster='+ new Date().getTime()); // Se muestra por consola 
+
+			// Se añade el nuevo script al head del documento.
+			var head = document.getElementsByTagName('head')[0];
+			head.appendChild(script);
+		}
+		
+		// Función que rellena el select de país de origen
+		function rellena_select()
+		{
+			// Añadimos textos
+			var txtFiltro = d3.select('body').select('div#seleccion-pais').html("País de origen:");
+			var txtFiltroDestino = d3.select('body').select('div#seleccion-pais-d').html("País de destino:");
+
+			// Accedemos al fichero
+			d3.csv("./lista_paises.csv", function(data)    
+			{
+				var select = d3.select('body').select('div#seleccion-pais').append('select').attr('class','seleccion');
+				var selectdestino = d3.select('body').select('div#seleccion-pais-d').append('select').attr('class','seleccion');
+				//console.error('select! '+select); // Se muestra por consola 
+ 	
+				// Se cargan los datos en nuestro array "links".
+				for (i=0; i < data.length ;i++)
+				{
+					//console.error('select! '+data[i].NombrePais); // Se muestra por consola 
+					select.append("option")
+						.attr("value", data[i].NombrePais)
+						.text(data[i].NombrePais);
+
+					selectdestino.append("option")
+						.attr("value", data[i].NombrePais)
+						.text(data[i].NombrePais);
+				}
+
+				select.on("change", function(d) {
+					pais_filtro = d3.select(this).property("value");
+					// alert(pais_filtro);
+					borra_mapa();
+					recarga_script();
+				});
+				
+				
+				selectdestino.on("change", function(d) {
+					pais_filtro_destino = d3.select(this).property("value");
+					borra_mapa();
+					recarga_script();
+				});
+			});
+		}
+	</script>
+
+
+	<div id="barraSuperior">
+		<div id="slider-time" class="slider_tiempo"></div>
+		<div id="slider-range" class="slider_rango"></div>
+		<div id="seleccion-pais" class="select_pais"></div>
+		<div id="seleccion-pais-d" class="select_pais_destino"></div>
+	</div>
+	<div id="info_interfaz"><br><br><br>Se muestran en esta página las rutas de refugiados recogidas por ACNUR entre 2009 y 2020.<br><br>Pueden filtrarse por rango de fechas, por el número de desplazados anuales en cada ruta, así como por el país de origen y destino.
+	</div>
+	<div id="barraInferior">
+		<div id="logoACNUR" class="infoLogoACNUR">
+			<a href="https://www.unhcr.org/refugee-statistics/download/?url=vE3Ih2"><img src="./logoACNUR.jpg" height="50px" title="Información publicada por ACNUR. Click para más información."></a>
+		</div>
+		<div id="total" class="infoInferior"></div>
+		<div id="logo" class="infoLogo"><img src="./logoUSAL_grande.png" height="50px" width="50px"></div>
+		<div id="info" class="infoPAIPO">Jaime Alba Cepero (Mayo 2021)<br>Paradigmas Avanzados de Interacción Persona-Ordenador.<br>Universidad de Salamanca</div>
+	</div>
+
+</body>
+</html>
